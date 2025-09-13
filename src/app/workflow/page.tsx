@@ -301,7 +301,27 @@ export default function WorkflowBuilder() {
 
     return null;
   };
+  const markDownstreamNodesAsSkipped = (
+    nodeId: string,
+    edges: Edge[],
+    skippedNodes: Set<string>
+  ) => {
+    // Find all edges that start from this node
+    const downstreamEdges = edges.filter((edge) => edge.source === nodeId);
 
+    downstreamEdges.forEach((edge) => {
+      const targetNodeId = edge.target;
+
+      // If this node isn't already skipped, mark it and continue downstream
+      if (!skippedNodes.has(targetNodeId)) {
+        skippedNodes.add(targetNodeId);
+        console.log(`❌ Marking downstream node ${targetNodeId} as SKIPPED`);
+
+        // Recursively mark nodes connected to this one
+        markDownstreamNodesAsSkipped(targetNodeId, edges, skippedNodes);
+      }
+    });
+  };
   const executeWorkflow = async () => {
     const metaMask = getMetaMaskProvider();
 
@@ -313,7 +333,7 @@ export default function WorkflowBuilder() {
     try {
       setIsExecuting(true);
       console.log("🚀 Starting workflow execution...");
-
+      const skippedNodes = new Set<string>();
       const accounts = await metaMask.request({
         method: "eth_accounts",
       });
@@ -348,6 +368,14 @@ export default function WorkflowBuilder() {
 
       // Execute nodes based on their type
       for (const node of nodes) {
+        if (skippedNodes.has(node.id)) {
+          console.log(
+            "⏭️ Skipping node (marked by compare):",
+            node.id,
+            node.data.label
+          );
+          continue;
+        }
         console.log("🔍 Processing node:", node.id, node.type, node.data.label);
         console.log(node.type , node.data.url);
         // Handle Send AVAX nodes
@@ -684,27 +712,32 @@ export default function WorkflowBuilder() {
             const edgesToExecute = result ? trueEdges : falseEdges;
             const pathTaken = result ? "TRUE" : "FALSE";
 
-            alert(
-              `🔍 Comparison Result: ${pathTaken}\n"${valueToCompare}" ${node.data.operator} "${compareValue}" = ${result}\nData from: ${dataSource}\nExecuting ${edgesToExecute.length} connected node(s)`
+             const nodesToSkip = result ? falseEdges : trueEdges;
+          const nodesToExecute = result ? trueEdges : falseEdges;
+
+          // Add all nodes in the wrong path to skipped list
+          nodesToSkip.forEach((edge) => {
+            const targetNodeId = edge.target;
+            skippedNodes.add(targetNodeId);
+            console.log(
+              `❌ Marking node ${targetNodeId} as SKIPPED (${
+                result ? "FALSE" : "TRUE"
+              } path)`
             );
 
-            // Execute connected nodes
-            if (edgesToExecute.length > 0) {
-              console.log(
-                `🔍 Taking ${pathTaken} path, executing ${edgesToExecute.length} nodes`
-              );
+            // Also mark all downstream nodes as skipped
+            markDownstreamNodesAsSkipped(targetNodeId, edges, skippedNodes);
+          });
 
-              for (const edge of edgesToExecute) {
-                const connectedNode = nodes.find((n) => n.id === edge.target);
-                if (connectedNode) {
-                  console.log(
-                    `🔍 Executing connected node: ${connectedNode.data.label}`
-                  );
-                  // Note: In a real implementation, you'd recursively execute these nodes
-                  // For now, we'll just log them
-                }
-              }
-            }
+          // Log which nodes will execute
+          nodesToExecute.forEach(edge => {
+            console.log(`✅ Node ${edge.target} will EXECUTE (${pathTaken} path)`);
+          });
+
+          console.log(
+            `🔍 Comparison Result: ${pathTaken}\n"${valueToCompare}" ${node.data.operator} "${node.data.value}" = ${result}\nData from: ${dataSource}\nWill execute: ${nodesToExecute.length} nodes, Will skip: ${nodesToSkip.length} nodes`
+          );
+            
           } catch (error: any) {
             console.error("❌ Compare node error:", error);
             alert(`Compare Error: ${error.message}`);
