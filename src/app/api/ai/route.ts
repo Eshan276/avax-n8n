@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = "AIzaSyDm7F7VRxnITrtDNnjjl3_rIIKHi3CWapw";
+    const apiKey = "";
 
     // Call Gemini API with the correct model name
     const response = await fetch(
