@@ -42,6 +42,8 @@ export interface ActionNodeData extends BaseNodeData {
   displayText?: string;
   phoneNumber?: string;
   message?: string;
+  prompt?: string;
+  outputActions?: string[];
 }
 
 export interface ConditionNodeData extends BaseNodeData {

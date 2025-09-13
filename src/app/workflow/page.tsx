@@ -17,7 +17,8 @@ import {
   NodeTypes,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { WhatsAppNode } from "@/components/nodes/ActionNodes";
+import { WhatsAppNode, AiNode } from "@/components/nodes/ActionNodes";
+
 // Import the new node components
 import { BlockTriggerNode, TimeTriggerNode, PriceTriggerNode } from "@/components/nodes/TriggerNodes";
 import { SendAvaxNode, SwapTokenNode, ContractCallNode } from "@/components/nodes/ActionNodes";
@@ -133,6 +134,7 @@ const nodeTypes: NodeTypes = {
   compare: CompareNode,
   delay: DelayNode,
   whatsApp: WhatsAppNode,
+  ai: AiNode,
   // Legacy nodes (for backwards compatibility)
   action: ActionNode,
   trigger: TriggerNode,
@@ -901,6 +903,104 @@ export default function WorkflowBuilder() {
             alert(`NFT Price Trigger Error: ${error.message}`);
           }
         }
+        // Handle AI nodes
+        // Replace the AI execution logic with this:
+
+        // Handle AI nodes
+        else if (node.type === "ai" && node.data.prompt) {
+          console.log("🤖 Found AI node");
+
+          try {
+            let finalPrompt = node.data.prompt;
+
+            // Replace {input} with data from previous nodes
+            if (finalPrompt.includes("{input}")) {
+              const inputEdges = edges.filter(
+                (edge) => edge.target === node.id
+              );
+
+              if (inputEdges.length > 0) {
+                const sourceNodeId = inputEdges[0].source;
+                const possibleKeys = Array.from(
+                  workflowDataStore.keys()
+                ).filter((key) => key.includes(sourceNodeId));
+
+                if (possibleKeys.length > 0) {
+                  const inputData = workflowDataStore.get(possibleKeys[0]);
+                  const dataString =
+                    typeof inputData === "object"
+                      ? JSON.stringify(inputData, null, 2)
+                      : String(inputData);
+
+                  finalPrompt = finalPrompt.replace("{input}", dataString);
+                  console.log("🤖 Using input data in prompt");
+                }
+              }
+            }
+
+            // Get output actions list
+            const outputActions = node.data.outputActions || [];
+
+            // Modify prompt to only return one action from the list
+            if (outputActions.length > 0) {
+              finalPrompt += `\n\nIMPORTANT: You must respond with ONLY ONE of these exact words: ${outputActions.join(
+                ", "
+              )}. Do not include any other text, explanation, or formatting. Just return one word from this list.`;
+            }
+
+            console.log("🤖 Final prompt:", finalPrompt);
+
+            const response = await fetch("/api/ai", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                prompt: finalPrompt,
+              }),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              // Clean the response to get only the action
+              let aiResponse = result.data.response.trim();
+
+              // If output actions are defined, validate the response
+              if (outputActions.length > 0) {
+                const validAction = outputActions.find((action) =>
+                  aiResponse.toLowerCase().includes(action.toLowerCase())
+                );
+
+                if (validAction) {
+                  aiResponse = validAction; // Use the exact action from the list
+                } else {
+                  // If AI didn't return a valid action, default to first one
+                  aiResponse = outputActions[0];
+                  console.log(
+                    "🤖 AI response not in action list, defaulting to:",
+                    aiResponse
+                  );
+                }
+              }
+
+              console.log("✅ AI action selected:", aiResponse);
+
+              // Store only the action
+              workflowDataStore.set(`ai_${node.id}`, aiResponse);
+              workflowDataStore.set(`ai_${node.id}_actions`, [aiResponse]);
+              
+              // Show the selected action
+              //alert(`🤖 AI Decision: ${aiResponse}`);
+            } else {
+              console.error("❌ AI request failed:", result.error);
+              alert(`AI Request Failed: ${JSON.stringify(result.error)}`);
+            }
+          } catch (error: any) {
+            console.error("❌ AI error:", error);
+            alert(`AI Error: ${error.message}`);
+          }
+        }
         // Skip trigger nodes and other unimplemented nodes
         else {
           console.log("⏭️ Skipping node:", node.type, node.data.label);
@@ -1136,7 +1236,19 @@ export default function WorkflowBuilder() {
               className="w-full bg-green-500 hover:bg-green-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
               📱 Send WhatsApp
-            </button> 
+            </button>
+            <button
+              onClick={() =>
+                addNode(
+                  "ai",
+                  "AI Assistant",
+                  "Generate AI responses"
+                )
+              }
+              className="w-full bg-violet-500 hover:bg-violet-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              🤖 AI Assistant
+            </button>
           </div>
 
           {/* Condition Nodes */}

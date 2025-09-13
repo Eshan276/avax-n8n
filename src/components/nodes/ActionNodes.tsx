@@ -521,3 +521,113 @@ export function WhatsAppNode({
     </div>
   );
 }
+
+// Replace the AiNode with this simpler version:
+
+export function AiNode({ id, data, selected }: NodeProps<ActionNodeData>) {
+  const updateNodeData = (key: string, value: any) => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("nodeDataUpdate", {
+          detail: { id, data: { ...data, [key]: value } },
+        })
+      );
+    }
+  };
+
+  const outputActions = data.outputActions || [];
+
+  const addOutputAction = () => {
+    const newActionName = `action_${outputActions.length + 1}`;
+    updateNodeData("outputActions", [...outputActions, newActionName]);
+  };
+
+  const updateOutputAction = (index: number, value: string) => {
+    const updatedActions = [...outputActions];
+    updatedActions[index] = value;
+    updateNodeData("outputActions", updatedActions);
+  };
+
+  const removeOutputAction = (index: number) => {
+    const updatedActions = outputActions.filter((_, i) => i !== index);
+    updateNodeData("outputActions", updatedActions);
+  };
+
+  return (
+    <div
+      className={`p-3 border rounded-lg bg-violet-50 shadow-sm min-w-[280px] ${
+        selected ? "border-violet-500 shadow-md" : "border-violet-300"
+      }`}
+    >
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!bg-violet-500 !border-violet-600"
+      />
+
+      <div className="font-medium text-sm text-violet-800 mb-2">
+        🤖 {data.label}
+      </div>
+
+      <div className="space-y-2">
+        {/* Prompt Input */}
+        <textarea
+          className="w-full p-2 text-xs border border-violet-300 rounded focus:border-violet-500 focus:outline-none resize-none text-gray-600"
+          placeholder="Enter your prompt or use {input} for data from previous node..."
+          rows={3}
+          value={data.prompt || ""}
+          onChange={(e) => updateNodeData("prompt", e.target.value)}
+        />
+
+        {/* Output Actions Header */}
+        <div className="flex justify-between items-center">
+          <label className="text-xs font-medium text-violet-700">
+            Output Actions:
+          </label>
+          <button
+            onClick={addOutputAction}
+            className="bg-violet-500 hover:bg-violet-600 text-white text-xs px-2 py-1 rounded transition-colors"
+          >
+            + Add
+          </button>
+        </div>
+
+        {/* Output Actions List */}
+        <div className="space-y-1 max-h-32 overflow-y-auto">
+          {outputActions.map((action, index) => (
+            <div key={index} className="flex gap-2 items-center">
+              <input
+                className="flex-1 p-2 text-xs border border-violet-300 rounded focus:border-violet-500 focus:outline-none text-gray-600"
+                placeholder={`Action ${
+                  index + 1
+                } (e.g., a, b, sendEmail, etc.)`}
+                value={action}
+                onChange={(e) => updateOutputAction(index, e.target.value)}
+              />
+              <button
+                onClick={() => removeOutputAction(index)}
+                className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded transition-colors"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {outputActions.length === 0 && (
+          <div className="text-xs text-gray-500 text-center py-2 bg-gray-50 rounded border border-dashed border-gray-300">
+            No output actions defined. Click "+ Add" to create one.
+          </div>
+        )}
+
+        <div className="text-xs text-violet-600">Powered by Google Gemini</div>
+      </div>
+
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!bg-violet-500 !border-violet-600"
+      />
+    </div>
+  );
+}
