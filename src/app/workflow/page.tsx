@@ -18,18 +18,21 @@ import {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-// Types
-interface ActionNodeData {
-  label: string;
-  to?: string;
-  amount?: string;
-}
+// Import the new node components
+import { BlockTriggerNode, TimeTriggerNode, PriceTriggerNode } from "@/components/nodes/TriggerNodes";
+import { SendAvaxNode, SwapTokenNode, ContractCallNode } from "@/components/nodes/ActionNodes";
+import { CompareNode, DelayNode } from "@/components/nodes/ConditionNodes";
+import { NodeData } from "@/types/nodes";
+import { SetDataNode, GetDataNode } from "@/components/nodes/DataNodes";
+import { ApiCallNode, ShowDataNode } from "@/components/nodes/ActionNodes";
+import { NftPriceTriggerNode } from "@/components/nodes/TriggerNodes";
 
+// Updated types
 interface WorkflowNode extends Node {
-  data: ActionNodeData;
+  data: NodeData;
 }
 
-// Custom ActionNode component
+// Legacy nodes (keep for backwards compatibility)
 function ActionNode({ id, data, selected }: any) {
   const [localData, setLocalData] = useState(data);
 
@@ -37,7 +40,6 @@ function ActionNode({ id, data, selected }: any) {
     const newData = { ...localData, [key]: value };
     setLocalData(newData);
 
-    // Dispatch custom event to parent
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("nodeDataUpdate", {
@@ -96,7 +98,6 @@ function ActionNode({ id, data, selected }: any) {
   );
 }
 
-// Trigger Node Component
 function TriggerNode({ data, selected }: any) {
   return (
     <div
@@ -117,10 +118,27 @@ function TriggerNode({ data, selected }: any) {
   );
 }
 
-// Node types
+// Updated node types with new nodes
 const nodeTypes: NodeTypes = {
+  // New node types
+  blockTrigger: BlockTriggerNode,
+  timeTrigger: TimeTriggerNode,
+  priceTrigger: PriceTriggerNode,
+  nftPriceTrigger: NftPriceTriggerNode, 
+  sendAvax: SendAvaxNode,
+  swapToken: SwapTokenNode,
+  contractCall: ContractCallNode,
+  apiCall: ApiCallNode,
+  showData: ShowDataNode,
+  compare: CompareNode,
+  delay: DelayNode,
+
+  // Legacy nodes (for backwards compatibility)
   action: ActionNode,
   trigger: TriggerNode,
+
+  setData: SetDataNode,
+  getData: GetDataNode,
 };
 
 export default function WorkflowBuilder() {
@@ -128,6 +146,7 @@ export default function WorkflowBuilder() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [mounted, setMounted] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
+  const workflowDataStore = new Map<string, any>();
 
   // Handle node data updates from custom events
   useEffect(() => {
@@ -148,14 +167,24 @@ export default function WorkflowBuilder() {
   const getInitialNodes = (): WorkflowNode[] => [
     {
       id: "1",
-      type: "trigger",
-      data: { label: "New AVAX Block" },
+      type: "blockTrigger",
+      data: { 
+        label: "New Block Trigger", 
+        description: "Triggers when a new block is mined",
+        type: "block"
+      },
       position: { x: 250, y: 50 },
     },
     {
       id: "2",
-      type: "action",
-      data: { label: "Action: Send AVAX", to: "", amount: "" },
+      type: "sendAvax",
+      data: { 
+        label: "Send AVAX", 
+        description: "Send AVAX to an address",
+        type: "send",
+        to: "", 
+        amount: "" 
+      },
       position: { x: 200, y: 200 },
     },
   ];
@@ -174,9 +203,8 @@ export default function WorkflowBuilder() {
   useEffect(() => {
     setMounted(true);
 
-    // Load from localStorage
     try {
-      const saved = localStorage.getItem("avax-workflow-v2");
+      const saved = localStorage.getItem("avax-workflow-v3");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.nodes && parsed.edges && Array.isArray(parsed.nodes)) {
@@ -189,7 +217,6 @@ export default function WorkflowBuilder() {
       console.warn("Failed to load workflow:", error);
     }
 
-    // Set defaults
     setNodes(getInitialNodes());
     setEdges(getInitialEdges());
   }, []);
@@ -200,19 +227,12 @@ export default function WorkflowBuilder() {
 
     try {
       const workflow = {
-        nodes: nodes.map((node) => ({
-          ...node,
-          data: {
-            label: node.data.label,
-            to: node.data.to || "",
-            amount: node.data.amount || "",
-          },
-        })),
+        nodes,
         edges,
         timestamp: Date.now(),
       };
 
-      localStorage.setItem("avax-workflow-v2", JSON.stringify(workflow));
+      localStorage.setItem("avax-workflow-v3", JSON.stringify(workflow));
     } catch (error) {
       console.warn("Failed to save workflow:", error);
     }
@@ -233,25 +253,24 @@ export default function WorkflowBuilder() {
     setNodes((nds) => applyNodeChanges(changes, nds) as WorkflowNode[]);
   }, []);
 
-  // Add node functions
-  const addTriggerNode = () => {
-    const newNode: WorkflowNode = {
-      id: `trigger-${Date.now()}`,
-      type: "trigger",
-      data: { label: "New AVAX Block" },
-      position: {
-        x: Math.random() * 400 + 100,
-        y: Math.random() * 200 + 50,
-      },
+  // Add node function
+  const addNode = (type: string, label: string, description?: string) => {
+    const baseData = { 
+      label, 
+      description,
+      type: type.replace(/Trigger|Node/g, '').toLowerCase() as any
     };
-    setNodes((nds) => [...nds, newNode]);
-  };
 
-  const addActionNode = () => {
+    // Add specific fields based on node type
+    let nodeData = baseData;
+    if (type.includes('send') || type.includes('swap') || type === 'action') {
+      nodeData = { ...baseData, to: "", amount: "" };
+    }
+
     const newNode: WorkflowNode = {
-      id: `action-${Date.now()}`,
-      type: "action",
-      data: { label: "Action: Send AVAX", to: "", amount: "" },
+      id: `${type}-${Date.now()}`,
+      type: type,
+      data: nodeData,
       position: {
         x: Math.random() * 400 + 100,
         y: Math.random() * 300 + 200,
@@ -260,19 +279,20 @@ export default function WorkflowBuilder() {
     setNodes((nds) => [...nds, newNode]);
   };
 
-  // Execute workflow
-  // Add this helper function at the top of your component (same as in AvaxWallet)
+  // Legacy add functions for backwards compatibility
+  const addTriggerNode = () => addNode("blockTrigger", "New Block Trigger", "Triggers when a new block is mined");
+  const addActionNode = () => addNode("sendAvax", "Send AVAX", "Send AVAX to an address");
+
+  // MetaMask provider helper
   const getMetaMaskProvider = () => {
     if (typeof window === "undefined") return null;
 
-    // If there are multiple providers, find MetaMask specifically
     if (window.ethereum?.providers) {
       return window.ethereum.providers.find(
         (provider: any) => provider.isMetaMask
       );
     }
 
-    // If single provider and it's MetaMask
     if (window.ethereum?.isMetaMask) {
       return window.ethereum;
     }
@@ -281,7 +301,6 @@ export default function WorkflowBuilder() {
   };
 
   const executeWorkflow = async () => {
-    // Use the specific MetaMask provider instead of generic window.ethereum
     const metaMask = getMetaMaskProvider();
 
     if (!metaMask) {
@@ -293,7 +312,6 @@ export default function WorkflowBuilder() {
       setIsExecuting(true);
       console.log("🚀 Starting workflow execution...");
 
-      // Get the connected account from MetaMask specifically
       const accounts = await metaMask.request({
         method: "eth_accounts",
       });
@@ -307,7 +325,6 @@ export default function WorkflowBuilder() {
       const account = accounts[0];
       console.log("👤 Using account:", account);
 
-      // Check if we're on Fuji testnet using MetaMask provider
       const chainId = await metaMask.request({
         method: "eth_chainId",
       });
@@ -315,23 +332,6 @@ export default function WorkflowBuilder() {
       const chainIdDecimal = parseInt(chainId, 16);
       console.log("🌐 Current chain ID (hex):", chainId);
       console.log("🌐 Current chain ID (decimal):", chainIdDecimal);
-      console.log("🌐 Expected Fuji chain ID (hex): 0xA869");
-      console.log("🌐 Expected Fuji chain ID (decimal): 43113");
-      console.log(
-        "🌐 Chain ID match check:",
-        chainId === "0xA869",
-        chainIdDecimal === 43113
-      );
-
-      // Get current network info
-      try {
-        const networkVersion = await metaMask.request({
-          method: "net_version",
-        });
-        console.log("🌐 Network version:", networkVersion);
-      } catch (netError) {
-        console.log("❌ Could not get network version:", netError);
-      }
 
       if (chainId !== "0xA869" && chainIdDecimal !== 43113) {
         console.log("❌ Wrong network detected!");
@@ -342,28 +342,20 @@ export default function WorkflowBuilder() {
       }
 
       console.log("✅ Correct network confirmed - Avalanche Fuji");
-
-      // Get current balance
-      try {
-        const balance = await metaMask.request({
-          method: "eth_getBalance",
-          params: [account, "latest"],
-        });
-        const balanceInAvax = (
-          parseInt(balance, 16) / Math.pow(10, 18)
-        ).toFixed(4);
-        console.log("💰 Current balance:", balanceInAvax, "AVAX");
-      } catch (balanceError) {
-        console.log("❌ Could not get balance:", balanceError);
-      }
-
       console.log("📊 Processing nodes:", nodes.length);
 
-      // Execute each action node
+      // Execute nodes based on their type
       for (const node of nodes) {
         console.log("🔍 Processing node:", node.id, node.type, node.data.label);
-
-        if (node.type === "action" && node.data.label.includes("Send AVAX")) {
+        console.log(node.type , node.data.url);
+        // Handle Send AVAX nodes
+        if (
+          (node.type === "sendAvax" ||
+            (node.type === "action" &&
+              node.data.label.includes("Send AVAX"))) &&
+          node.data.to &&
+          node.data.amount
+        ) {
           console.log("💸 Found Send AVAX action node");
           console.log("📝 Node data:", {
             to: node.data.to,
@@ -371,20 +363,9 @@ export default function WorkflowBuilder() {
             label: node.data.label,
           });
 
-          if (!node.data.to || !node.data.amount) {
-            console.log("❌ Missing required fields for node:", node.id);
-            alert(`Node ${node.id} missing recipient address or amount`);
-            continue;
-          }
-
           // Validate recipient address
           const addressRegex = /^0x[a-fA-F0-9]{40}$/;
           const isValidAddress = addressRegex.test(node.data.to);
-          console.log("🔍 Address validation:", {
-            address: node.data.to,
-            isValid: isValidAddress,
-            length: node.data.to.length,
-          });
 
           if (!isValidAddress) {
             console.log("❌ Invalid address format");
@@ -392,7 +373,7 @@ export default function WorkflowBuilder() {
             continue;
           }
 
-          // Convert amount to wei (18 decimals for AVAX)
+          // Convert amount to wei
           const amountFloat = parseFloat(node.data.amount);
           const amountInWei = BigInt(
             Math.floor(amountFloat * Math.pow(10, 18))
@@ -406,21 +387,16 @@ export default function WorkflowBuilder() {
             amountInWeiHex: amountInWeiHex,
           });
 
-          console.log(
-            `📤 Preparing to send ${node.data.amount} AVAX to ${node.data.to}`
-          );
-
           const txParams = {
             from: account,
             to: node.data.to,
             value: amountInWeiHex,
-            gas: "0x5208", // 21000 gas for simple transfer
+            gas: "0x5208",
           };
 
           console.log("📋 Transaction parameters:", txParams);
-
-          // Send transaction using MetaMask specifically
           console.log("🔄 Sending transaction...");
+
           const txHash = await metaMask.request({
             method: "eth_sendTransaction",
             params: [txParams],
@@ -430,33 +406,481 @@ export default function WorkflowBuilder() {
           console.log("📄 Transaction hash:", txHash);
 
           const explorerUrl = `https://testnet.snowtrace.io/tx/${txHash}`;
-          console.log("🔗 Explorer URL:", explorerUrl);
-
           alert(
             `Transaction sent successfully!\nTx Hash: ${txHash}\nView on explorer: ${explorerUrl}`
           );
-        } else {
-          console.log(
-            "⏭️ Skipping non-action node:",
-            node.type,
-            node.data.label
+        }
+
+        // Handle Contract Call nodes
+        else if (
+          node.type === "contractCall" &&
+          node.data.contractAddress &&
+          node.data.functionName
+        ) {
+          console.log("📞 Found Contract Call node");
+          console.log("📝 Contract data:", {
+            address: node.data.contractAddress,
+            function: node.data.functionName,
+            parameters: node.data.parameters,
+          });
+
+          try {
+            // Parse parameters
+            let params = [];
+            if (node.data.parameters) {
+              try {
+                params = JSON.parse(node.data.parameters);
+              } catch (parseError) {
+                console.error(
+                  "❌ Invalid JSON parameters:",
+                  node.data.parameters
+                );
+                alert(`Invalid JSON parameters: ${node.data.parameters}`);
+                continue;
+              }
+            }
+
+            // Create contract interface for the Simple Storage contract
+            const contractABI = [
+              "function store(uint256 num) public",
+              "function retrieve() public view returns (uint256)",
+            ];
+
+            // Create contract instance using ethers
+            const { ethers } = await import("ethers");
+            const provider = new ethers.BrowserProvider(metaMask);
+            const signer = await provider.getSigner();
+            const contract = new ethers.Contract(
+              node.data.contractAddress,
+              contractABI,
+              signer
+            );
+
+            console.log(
+              "📋 Calling contract function:",
+              node.data.functionName,
+              "with params:",
+              params
+            );
+
+            // Call the contract function
+            if (node.data.functionName === "store") {
+              // For write functions, send transaction
+              const tx = await contract.store(...params);
+              console.log("📄 Contract transaction sent:", tx.hash);
+
+              // Wait for confirmation
+              const receipt = await tx.wait();
+              console.log("✅ Contract transaction confirmed:", receipt.hash);
+
+              const explorerUrl = `https://testnet.snowtrace.io/tx/${tx.hash}`;
+              alert(
+                `Contract call successful!\nFunction: ${node.data.functionName}\nValue stored: ${params[0]}\nTx Hash: ${tx.hash}\nView: ${explorerUrl}`
+              );
+            } else if (node.data.functionName === "retrieve") {
+              // For read functions, just call
+              const result = await contract.retrieve();
+              console.log("📖 Contract read result:", result.toString());
+              alert(
+                `Contract read successful!\nFunction: ${
+                  node.data.functionName
+                }\nStored value: ${result.toString()}`
+              );
+            } else {
+              console.log("❌ Unknown function:", node.data.functionName);
+              alert(
+                `Unknown function: ${node.data.functionName}. Available: store, retrieve`
+              );
+            }
+          } catch (contractError: any) {
+            console.error("❌ Contract call error:", contractError);
+            alert(`Contract call failed: ${contractError.message}`);
+            continue;
+          }
+        }
+
+        
+
+        // Handle Swap Token nodes (placeholder)
+        else if (
+          node.type === "swapToken" &&
+          node.data.tokenAddress &&
+          node.data.to &&
+          node.data.amount
+        ) {
+          console.log("🔄 Found Swap Token node (not implemented yet)");
+          alert("Swap functionality coming soon!");
+        }
+
+        // Handle Time Trigger nodes
+        else if (node.type === "timeTrigger" && node.data.interval) {
+          console.log("⏰ Found Time Trigger node");
+          console.log(`⏰ Time trigger set for ${node.data.interval} seconds`);
+          // Note: In a real implementation, this would set up a recurring timer
+          alert(
+            `Time trigger configured for ${node.data.interval} seconds interval`
           );
+        }
+
+        // Handle Price Trigger nodes
+        else if (node.type === "priceTrigger" && node.data.threshold) {
+          console.log("💰 Found Price Trigger node");
+          console.log(`💰 Price trigger set for $${node.data.threshold}`);
+          // Note: In a real implementation, this would monitor price feeds
+          alert(
+            `Price trigger configured for $${node.data.threshold} threshold`
+          );
+        }
+
+        // Handle Compare nodes
+        else if (
+            node.type === "compare" &&
+            node.data.operator &&
+            node.data.value
+        ) {
+            console.log("🔍 Found Compare node");
+            console.log(
+            `🔍 Compare: value ${node.data.operator} ${node.data.value}`
+            );
+            alert(`Compare condition: ${node.data.operator} ${node.data.value}`);
+        }
+
+        // Handle Delay nodes
+        else if (node.type === "delay" && node.data.delayTime) {
+          console.log("⏳ Found Delay node");
+          console.log(`⏳ Delaying for ${node.data.delayTime} seconds`);
+
+          // Actually implement the delay
+          await new Promise((resolve) =>
+            setTimeout(resolve, parseInt(node.data.delayTime) * 1000)
+          );
+
+          alert(`Delayed execution by ${node.data.delayTime} seconds`);
+        } 
+        else if (node.type === "setData" && node.data.storageKey) {
+          console.log("💾 Found Set Data node");
+
+          try {
+            let valueToStore;
+
+            if (node.data.dataType === "json" && node.data.inputJson) {
+              // Parse and store JSON
+              valueToStore = JSON.parse(node.data.inputJson);
+              console.log("📝 Storing JSON data:", valueToStore);
+            } else if (node.data.inputValue) {
+              // Store simple value
+              valueToStore = node.data.inputValue;
+              console.log("📝 Storing value:", valueToStore);
+            } else {
+              console.log("❌ No data to store");
+              alert("No data provided to store");
+              continue;
+            }
+
+            // Store in workflow data store
+            workflowDataStore.set(node.data.storageKey, valueToStore);
+            console.log(`✅ Data stored with key: ${node.data.storageKey}`);
+            alert(
+              `Data stored successfully!\nKey: ${
+                node.data.storageKey
+              }\nValue: ${JSON.stringify(valueToStore)}`
+            );
+          } catch (error: any) {
+            console.error("❌ Set Data error:", error);
+            alert(`Failed to store data: ${error.message}`);
+          }
+        }
+
+        // Handle Get Data nodes
+        else if (node.type === "getData" && node.data.storageKey) {
+          console.log("📤 Found Get Data node");
+
+          try {
+            const storedData = workflowDataStore.get(node.data.storageKey);
+
+            if (storedData === undefined) {
+              console.log("❌ No data found for key:", node.data.storageKey);
+              alert(`No data found for key: ${node.data.storageKey}`);
+              continue;
+            }
+
+            let outputValue = storedData;
+
+            // If outputKey is specified and stored data is an object, extract specific key
+            if (
+              node.data.outputKey &&
+              typeof storedData === "object" &&
+              storedData !== null
+            ) {
+              outputValue = storedData[node.data.outputKey];
+              console.log(
+                `📤 Extracted value for key '${node.data.outputKey}':`,
+                outputValue
+              );
+            } else {
+              console.log("📤 Retrieved full data:", outputValue);
+            }
+
+            alert(
+              `Data retrieved successfully!\nKey: ${
+                node.data.storageKey
+              }\nValue: ${JSON.stringify(outputValue)}`
+            );
+          } catch (error: any) {
+            console.error("❌ Get Data error:", error);
+            alert(`Failed to retrieve data: ${error.message}`);
+          }
+        } else if (node.type === "apiCall" && node.data.url) {
+          console.log("🌐 Found API Call node");
+
+          try {
+            const response = await fetch("/api/proxy", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                url: node.data.url,
+                method: node.data.method || "GET",
+                headers: node.data.headers || "",
+                body: node.data.body || "",
+              }),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              console.log("✅ API call successful:", result.data);
+
+              // Store API response in workflow data store
+              workflowDataStore.set(`api_${node.id}`, result.data);
+
+              alert(
+                `API Call Successful!\nStatus: ${result.status}\nData stored with key: api_${node.id}`
+              );
+            } else {
+              console.error("❌ API call failed:", result.error);
+              alert(`API Call Failed: ${result.error}`);
+            }
+          } catch (error: any) {
+            console.error("❌ API call error:", error);
+            alert(`API Call Error: ${error.message}`);
+          }
+        }
+        // Replace the existing Show Data handling with this:
+
+
+        else if (node.type === "showData") {
+          console.log("📊 Found Show Data node");
+
+          try {
+            let dataToShow = null;
+            let dataSource = "unknown";
+
+            // Method 1: Special case for "*" - show all data
+            if (node.data.dataKey === "*") {
+              const allData = {};
+              for (const [key, value] of workflowDataStore.entries()) {
+                allData[key] = value;
+              }
+              dataToShow = allData;
+              dataSource = "all stored data";
+            }
+            // Method 2: Try to get data from connected input first
+            else {
+              // Find nodes that connect to this show data node
+              const inputEdges = edges.filter(
+                (edge) => edge.target === node.id
+              );
+              console.log("📊 Input edges for show data:", inputEdges);
+
+              if (inputEdges.length > 0) {
+                // Get the source node
+                const sourceEdge = inputEdges[0]; // Take first input
+                const sourceNodeId = sourceEdge.source;
+
+                // Check if source node has stored data
+                const possibleKeys = Array.from(
+                  workflowDataStore.keys()
+                ).filter((key) => key.includes(sourceNodeId));
+
+                console.log("📊 Possible data keys from source:", possibleKeys);
+
+                if (possibleKeys.length > 0) {
+                  dataToShow = workflowDataStore.get(possibleKeys[0]);
+                  dataSource = `connected node: ${possibleKeys[0]}`;
+                  console.log("📊 Raw data from connected node:", dataToShow);
+                }
+              }
+
+              // Method 3: If no connected input, try exact key match
+              if (dataToShow === null && node.data.dataKey) {
+                dataToShow = workflowDataStore.get(node.data.dataKey);
+                if (dataToShow !== undefined) {
+                  dataSource = `stored key: ${node.data.dataKey}`;
+                }
+              }
+            }
+
+            // Method 4: Extract specific property if requested
+            if (
+              dataToShow &&
+              node.data.dataKey &&
+              node.data.dataKey !== "*" &&
+              typeof dataToShow === "object"
+            ) {
+              if (dataToShow.hasOwnProperty(node.data.dataKey)) {
+                const extractedValue = dataToShow[node.data.dataKey];
+                console.log(
+                  `📊 Extracting property '${node.data.dataKey}':`,
+                  extractedValue
+                );
+                dataToShow = extractedValue;
+                dataSource = `property '${node.data.dataKey}' from ${dataSource}`;
+              } else {
+                console.log(
+                  `📊 Property '${node.data.dataKey}' not found in object. Available properties:`,
+                  Object.keys(dataToShow)
+                );
+              }
+            }
+
+            console.log("📊 Final data to show:", dataToShow);
+            console.log("📊 Data source:", dataSource);
+
+            if (dataToShow === null || dataToShow === undefined) {
+              const availableKeys = Array.from(workflowDataStore.keys());
+              const sampleData =
+                availableKeys.length > 0
+                  ? workflowDataStore.get(availableKeys[0])
+                  : null;
+              const availableProps =
+                sampleData && typeof sampleData === "object"
+                  ? Object.keys(sampleData)
+                  : [];
+
+              alert(
+                `No data found!\nTried: ${
+                  node.data.dataKey || "auto-detect from input"
+                }\nAvailable storage keys: ${availableKeys.join(
+                  ", "
+                )}\nAvailable properties in latest data: ${availableProps.join(
+                  ", "
+                )}`
+              );
+              continue;
+            }
+
+            const displayLabel = node.data.displayText || "Data Display";
+            const formattedData =
+              typeof dataToShow === "object"
+                ? JSON.stringify(dataToShow, null, 2)
+                : String(dataToShow);
+
+            // Create a modal to display the data
+            const modal = document.createElement("div");
+            modal.className =
+              "fixed inset-0 bg-transparent bg-opacity-50 flex items-center justify-center z-50";
+            modal.innerHTML = `
+      <div class="bg-white p-6 rounded-lg max-w-4xl max-h-96 overflow-auto shadow-xl">
+        <h3 class="text-lg font-bold mb-2">${displayLabel}</h3>
+        <p class="text-sm text-gray-600 mb-4">Source: ${dataSource}</p>
+        <pre class="bg-gray-100 p-4 rounded text-sm overflow-auto whitespace-pre-wrap text-gray-800">${formattedData}</pre>
+        <button onclick="this.closest('.fixed').remove()" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors">
+          Close
+        </button>
+      </div>
+    `;
+
+            document.body.appendChild(modal);
+
+            console.log("📊 Data displayed successfully");
+          } catch (error: any) {
+            console.error("❌ Show Data error:", error);
+            alert(`Show Data Error: ${error.message}`);
+          }
+        } else if (node.type === "nftPriceTrigger" && node.data.nftContract) {
+          console.log("🖼️ Found NFT Price Trigger node");
+
+          try {
+            const response = await fetch("/api/nft-price", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                nftContract: node.data.nftContract,
+                tokenId: node.data.tokenId,
+                marketplace: node.data.marketplace || "joepegs",
+              }),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              const priceData = result.data;
+              console.log("✅ NFT Price data fetched:", priceData);
+
+              // Store price data in workflow data store
+              workflowDataStore.set(`nft_price_${node.id}`, priceData);
+
+              // Check price condition if specified
+              if (node.data.priceThreshold && node.data.priceCondition) {
+                const threshold = parseFloat(node.data.priceThreshold);
+                const currentPrice = priceData.floorPrice;
+                let conditionMet = false;
+
+                switch (node.data.priceCondition) {
+                  case "above":
+                    conditionMet = currentPrice > threshold;
+                    break;
+                  case "below":
+                    conditionMet = currentPrice < threshold;
+                    break;
+                  case "equal":
+                    conditionMet = Math.abs(currentPrice - threshold) < 0.01;
+                    break;
+                }
+
+                console.log(
+                  `🖼️ Price condition: ${currentPrice} ${node.data.priceCondition} ${threshold} = ${conditionMet}`
+                );
+
+                if (conditionMet) {
+                  alert(
+                    `🖼️ NFT Price Trigger Activated!\nCurrent Price: ${currentPrice} AVAX\nCondition: ${node.data.priceCondition} ${threshold} AVAX\nMarketplace: ${priceData.marketplace}`
+                  );
+                } else {
+                  alert(
+                    `🖼️ NFT Price Checked\nCurrent Price: ${currentPrice} AVAX\nCondition NOT met: ${node.data.priceCondition} ${threshold} AVAX`
+                  );
+                }
+              } else {
+                alert(
+                  `🖼️ NFT Price Retrieved!\nFloor Price: ${priceData.floorPrice} AVAX\nLast Sale: ${priceData.lastSale} AVAX\nMarketplace: ${priceData.marketplace}`
+                );
+              }
+            } else {
+              console.error("❌ NFT price fetch failed:", result.error);
+              alert(`NFT Price Fetch Failed: ${result.error}`);
+            }
+          } catch (error: any) {
+            console.error("❌ NFT price trigger error:", error);
+            alert(`NFT Price Trigger Error: ${error.message}`);
+          }
+        }
+        // Skip trigger nodes and other unimplemented nodes
+        else {
+          console.log("⏭️ Skipping node:", node.type, node.data.label);
         }
       }
 
       console.log("🎉 Workflow execution completed!");
     } catch (error: any) {
       console.error("❌ Failed to execute workflow:", error);
-      console.error("❌ Error details:", {
-        name: error.name,
-        message: error.message,
-        code: error.code,
-        stack: error.stack,
-      });
       alert(`Failed to execute workflow: ${error.message}`);
     } finally {
       setIsExecuting(false);
-      console.log("🏁 Execution finished, isExecuting set to false");
     }
   };
 
@@ -469,71 +893,47 @@ export default function WorkflowBuilder() {
 
     try {
       console.log("🔍 DEBUGGING METAMASK STATE:");
-
-      // Check accounts
       const accounts = await window.ethereum.request({
         method: "eth_accounts",
       });
       console.log("📋 Accounts from eth_accounts:", accounts);
 
-      // Check chain ID
       const chainId = await window.ethereum.request({
         method: "eth_chainId",
       });
-      console.log(
-        "🌐 Chain ID from eth_chainId:",
-        chainId,
-        "decimal:",
-        parseInt(chainId, 16)
-      );
-
-      // Check network version
-      const networkVersion = await window.ethereum.request({
-        method: "net_version",
-      });
-      console.log("🌐 Network version:", networkVersion);
-
-      // Check if MetaMask is the active provider
-      console.log("🦊 Is MetaMask:", window.ethereum.isMetaMask);
-      console.log("🦊 Providers:", window.ethereum.providers);
+      console.log("🌐 Chain ID from eth_chainId:", chainId, "decimal:", parseInt(chainId, 16));
     } catch (error) {
       console.error("❌ Debug error:", error);
     }
   };
 
-  // Clear workflow
+  // Utility functions
   const clearWorkflow = () => {
     if (confirm("Are you sure you want to clear the entire workflow?")) {
       setNodes(getInitialNodes());
       setEdges(getInitialEdges());
-      localStorage.removeItem("avax-workflow-v2");
+      localStorage.removeItem("avax-workflow-v3");
     }
   };
 
-  // Delete selected nodes
   const deleteSelected = () => {
     setNodes((nds) => nds.filter((n) => !n.selected));
     setEdges((eds) =>
       eds.filter((e) => {
-        const sourceExists = nodes.some(
-          (n) => n.id === e.source && !n.selected
-        );
-        const targetExists = nodes.some(
-          (n) => n.id === e.target && !n.selected
-        );
+        const sourceExists = nodes.some((n) => n.id === e.source && !n.selected);
+        const targetExists = nodes.some((n) => n.id === e.target && !n.selected);
         return sourceExists && targetExists;
       })
     );
   };
 
-  // Export workflow
   const exportWorkflow = () => {
     const workflow = {
       nodes,
       edges,
       metadata: {
         created: new Date().toISOString(),
-        version: "2.0",
+        version: "3.0",
       },
     };
 
@@ -549,7 +949,6 @@ export default function WorkflowBuilder() {
     URL.revokeObjectURL(url);
   };
 
-  // Import workflow
   const importWorkflow = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -575,16 +974,14 @@ export default function WorkflowBuilder() {
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto"></div>
-          <p className="mt-4 text-gray-600 font-medium">
-            Loading Workflow Builder...
-          </p>
+          <p className="mt-4 text-gray-600 font-medium">Loading Workflow Builder...</p>
         </div>
       </div>
     );
   }
 
-  const actionCount = nodes.filter((n) => n.type === "action").length;
-  const triggerCount = nodes.filter((n) => n.type === "trigger").length;
+  const actionCount = nodes.filter((n) => n.type === "sendAvax" || n.type === "swapToken" || n.type === "contractCall" || n.type === "action").length;
+  const triggerCount = nodes.filter((n) => n.type === "blockTrigger" || n.type === "timeTrigger" || n.type === "priceTrigger" || n.type === "trigger").length;
 
   return (
     <div className="h-screen flex bg-gray-50">
@@ -596,22 +993,156 @@ export default function WorkflowBuilder() {
         </div>
 
         <div className="flex-1 p-4 space-y-6 overflow-y-auto">
-          {/* Add Nodes Section */}
+          {/* Trigger Nodes */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-              Add Nodes
+              Trigger Nodes
             </h3>
             <button
-              onClick={addTriggerNode}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+              onClick={() =>
+                addNode(
+                  "blockTrigger",
+                  "New Block Trigger",
+                  "Triggers when a new block is mined"
+                )
+              }
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              🚀 Trigger Node
+              🔗 Block Trigger
             </button>
             <button
-              onClick={addActionNode}
-              className="w-full bg-green-500 hover:bg-green-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+              onClick={() =>
+                addNode(
+                  "timeTrigger",
+                  "Time Trigger",
+                  "Triggers at specified intervals"
+                )
+              }
+              className="w-full bg-purple-500 hover:bg-purple-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              ⚡ Action Node
+              ⏰ Time Trigger
+            </button>
+            <button
+              onClick={() =>
+                addNode(
+                  "priceTrigger",
+                  "Price Trigger",
+                  "Triggers when price reaches threshold"
+                )
+              }
+              className="w-full bg-yellow-500 hover:bg-yellow-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              💰 Price Trigger
+            </button>
+            <button
+              onClick={() =>
+                addNode(
+                  "nftPriceTrigger",
+                  "NFT Price Trigger",
+                  "Triggers when NFT price meets conditions"
+                )
+              }
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              🖼️ NFT Price Trigger
+            </button>
+          </div>
+
+          {/* Action Nodes */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+              Action Nodes
+            </h3>
+            <button
+              onClick={() =>
+                addNode("sendAvax", "Send AVAX", "Send AVAX to an address")
+              }
+              className="w-full bg-green-500 hover:bg-green-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              💸 Send AVAX
+            </button>
+            <button
+              onClick={() =>
+                addNode("swapToken", "Swap Tokens", "Swap tokens via DEX")
+              }
+              className="w-full bg-indigo-500 hover:bg-indigo-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              🔄 Swap Tokens
+            </button>
+            <button
+              onClick={() =>
+                addNode(
+                  "contractCall",
+                  "Contract Call",
+                  "Call smart contract function"
+                )
+              }
+              className="w-full bg-red-500 hover:bg-red-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              📞 Contract Call
+            </button>
+            <button
+              onClick={() =>
+                addNode("apiCall", "API Call", "Make HTTP requests to APIs")
+              }
+              className="w-full bg-purple-500 hover:bg-purple-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              🌐 API Call
+            </button>
+            <button
+              onClick={() =>
+                addNode("showData", "Show Data", "Display data in UI")
+              }
+              className="w-full bg-pink-500 hover:bg-pink-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              📊 Show Data
+            </button>
+          </div>
+
+          {/* Condition Nodes */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+              Condition Nodes
+            </h3>
+            <button
+              onClick={() =>
+                addNode(
+                  "compare",
+                  "Compare Values",
+                  "Compare values with conditions"
+                )
+              }
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              🔍 Compare
+            </button>
+            <button
+              onClick={() => addNode("delay", "Delay", "Add delay to workflow")}
+              className="w-full bg-gray-500 hover:bg-gray-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              ⏳ Delay
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+              Data Nodes
+            </h3>
+            <button
+              onClick={() =>
+                addNode("setData", "Set Data", "Store data for later use")
+              }
+              className="w-full bg-cyan-500 hover:bg-cyan-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              💾 Set Data
+            </button>
+            <button
+              onClick={() =>
+                addNode("getData", "Get Data", "Retrieve stored data")
+              }
+              className="w-full bg-teal-500 hover:bg-teal-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              📤 Get Data
             </button>
           </div>
 
@@ -731,9 +1262,23 @@ export default function WorkflowBuilder() {
           <Background color="#e2e8f0" gap={20} size={1} variant="dots" as any />
           <Controls showInteractive={false} />
           <MiniMap
-            nodeColor={(node) =>
-              node.type === "trigger" ? "#3b82f6" : "#10b981"
-            }
+            nodeColor={(node) => {
+              if (node.type?.includes("Trigger") || node.type === "trigger")
+                return "#3b82f6";
+              if (
+                node.type?.includes("send") ||
+                node.type?.includes("swap") ||
+                node.type?.includes("contract") ||
+                node.type === "action"
+              )
+                return "#10b981";
+              if (
+                node.type?.includes("compare") ||
+                node.type?.includes("delay")
+              )
+                return "#f59e0b";
+              return "#6b7280";
+            }}
             maskColor="rgba(0,0,0,0.05)"
             style={{
               background: "white",
