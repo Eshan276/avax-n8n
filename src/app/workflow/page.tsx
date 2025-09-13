@@ -570,16 +570,145 @@ export default function WorkflowBuilder() {
         }
 
         // Handle Compare nodes
+        // Replace the compare node logic with this:
         else if (
           node.type === "compare" &&
           node.data.operator &&
           node.data.value
         ) {
           console.log("🔍 Found Compare node");
-          console.log(
-            `🔍 Compare: value ${node.data.operator} ${node.data.value}`
-          );
-          alert(`Compare condition: ${node.data.operator} ${node.data.value}`);
+
+          try {
+            let valueToCompare = null;
+            let dataSource = "unknown";
+
+            // Method 1: Try to get data from connected input first
+            const inputEdges = edges.filter((edge) => edge.target === node.id);
+
+            if (inputEdges.length > 0) {
+              const sourceNodeId = inputEdges[0].source;
+              const possibleKeys = Array.from(workflowDataStore.keys()).filter(
+                (key) => key.includes(sourceNodeId)
+              );
+
+              if (possibleKeys.length > 0) {
+                valueToCompare = workflowDataStore.get(possibleKeys[0]);
+                dataSource = `connected node: ${possibleKeys[0]}`;
+              }
+            }
+
+            // Method 2: If no connected input, try exact key match
+            if (valueToCompare === null && node.data.inputKey) {
+              valueToCompare = workflowDataStore.get(node.data.inputKey);
+              if (valueToCompare !== undefined) {
+                dataSource = `stored key: ${node.data.inputKey}`;
+              }
+            }
+
+            // Method 3: If still no data and no inputKey specified, use the first available data
+            if (valueToCompare === null && !node.data.inputKey) {
+              const allKeys = Array.from(workflowDataStore.keys());
+              if (allKeys.length > 0) {
+                const firstKey = allKeys[0];
+                valueToCompare = workflowDataStore.get(firstKey);
+                dataSource = `first available data: ${firstKey}`;
+                console.log(
+                  `🔍 No input key specified, using first available data: ${firstKey}`
+                );
+              }
+            }
+
+            if (valueToCompare === null || valueToCompare === undefined) {
+              console.log("❌ No data found for comparison");
+              const availableKeys = Array.from(workflowDataStore.keys());
+              alert(
+                `No data found for comparison.\nAvailable keys: ${availableKeys.join(
+                  ", "
+                )}\nEither connect a node or specify a data key.`
+              );
+              continue;
+            }
+
+            console.log(
+              `🔍 Comparing: "${valueToCompare}" ${node.data.operator} "${node.data.value}"`
+            );
+            console.log(`🔍 Data source: ${dataSource}`);
+
+            // Perform the comparison
+            let result = false;
+            const compareValue = node.data.value;
+
+            switch (node.data.operator) {
+              case "==":
+                result =
+                  String(valueToCompare).toLowerCase() ===
+                  compareValue.toLowerCase();
+                break;
+              case "!=":
+                result =
+                  String(valueToCompare).toLowerCase() !==
+                  compareValue.toLowerCase();
+                break;
+              case "contains":
+                result = String(valueToCompare)
+                  .toLowerCase()
+                  .includes(compareValue.toLowerCase());
+                break;
+              case ">":
+                result = Number(valueToCompare) > Number(compareValue);
+                break;
+              case "<":
+                result = Number(valueToCompare) < Number(compareValue);
+                break;
+              case ">=":
+                result = Number(valueToCompare) >= Number(compareValue);
+                break;
+              case "<=":
+                result = Number(valueToCompare) <= Number(compareValue);
+                break;
+            }
+
+            console.log(`🔍 Comparison result: ${result}`);
+
+            // Store the result
+            workflowDataStore.set(`compare_${node.id}`, result);
+
+            // Find and execute connected nodes based on the result
+            const trueEdges = edges.filter(
+              (edge) => edge.source === node.id && edge.sourceHandle === "true"
+            );
+            const falseEdges = edges.filter(
+              (edge) => edge.source === node.id && edge.sourceHandle === "false"
+            );
+
+            const edgesToExecute = result ? trueEdges : falseEdges;
+            const pathTaken = result ? "TRUE" : "FALSE";
+
+            alert(
+              `🔍 Comparison Result: ${pathTaken}\n"${valueToCompare}" ${node.data.operator} "${compareValue}" = ${result}\nData from: ${dataSource}\nExecuting ${edgesToExecute.length} connected node(s)`
+            );
+
+            // Execute connected nodes
+            if (edgesToExecute.length > 0) {
+              console.log(
+                `🔍 Taking ${pathTaken} path, executing ${edgesToExecute.length} nodes`
+              );
+
+              for (const edge of edgesToExecute) {
+                const connectedNode = nodes.find((n) => n.id === edge.target);
+                if (connectedNode) {
+                  console.log(
+                    `🔍 Executing connected node: ${connectedNode.data.label}`
+                  );
+                  // Note: In a real implementation, you'd recursively execute these nodes
+                  // For now, we'll just log them
+                }
+              }
+            }
+          } catch (error: any) {
+            console.error("❌ Compare node error:", error);
+            alert(`Compare Error: ${error.message}`);
+          }
         }
 
         // Handle Delay nodes
@@ -989,7 +1118,7 @@ export default function WorkflowBuilder() {
               // Store only the action
               workflowDataStore.set(`ai_${node.id}`, aiResponse);
               workflowDataStore.set(`ai_${node.id}_actions`, [aiResponse]);
-              
+
               // Show the selected action
               //alert(`🤖 AI Decision: ${aiResponse}`);
             } else {
@@ -1001,6 +1130,10 @@ export default function WorkflowBuilder() {
             alert(`AI Error: ${error.message}`);
           }
         }
+        // Add this in your executeWorkflow function, after the AI node handling:
+
+        // Handle Compare nodes
+
         // Skip trigger nodes and other unimplemented nodes
         else {
           console.log("⏭️ Skipping node:", node.type, node.data.label);

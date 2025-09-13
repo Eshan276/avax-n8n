@@ -18,7 +18,7 @@ export function CompareNode({
 
   return (
     <div
-      className={`p-3 border rounded-lg bg-orange-50 shadow-sm min-w-[200px] ${
+      className={`p-3 border rounded-lg bg-orange-50 shadow-sm min-w-[220px] ${
         selected ? "border-orange-500 shadow-md" : "border-orange-300"
       }`}
     >
@@ -33,25 +33,38 @@ export function CompareNode({
       </div>
 
       <div className="space-y-2">
-        <select
-          className="w-full p-2 text-xs border border-orange-300 rounded focus:border-orange-500 focus:outline-none text-gray-600"
-          value={data.operator || ""}
-          onChange={(e) => updateNodeData("operator", e.target.value)}
-        >
-          <option value="">Select operator</option>
-          <option value=">">Greater than</option>
-          <option value="<">Less than</option>
-          <option value="==">Equal to</option>
-          <option value="!=">Not equal to</option>
-          <option value=">=">Greater or equal</option>
-          <option value="<=">Less or equal</option>
-        </select>
+        {/* Input Source */}
         <input
           className="w-full p-2 text-xs border border-orange-300 rounded focus:border-orange-500 focus:outline-none text-gray-600"
-          placeholder="Value to compare"
+          placeholder="Data key (e.g., ai_nodeId) or leave empty for auto"
+          value={data.inputKey || ""}
+          onChange={(e) => updateNodeData("inputKey", e.target.value)}
+        />
+
+        <select
+          className="w-full p-2 text-xs border border-orange-300 rounded focus:border-orange-500 focus:outline-none text-gray-600"
+          value={data.operator || "=="}
+          onChange={(e) => updateNodeData("operator", e.target.value)}
+        >
+          <option value="==">Equal to</option>
+          <option value="!=">Not equal to</option>
+          <option value=">">Greater than</option>
+          <option value="<">Less than</option>
+          <option value=">=">Greater or equal</option>
+          <option value="<=">Less or equal</option>
+          <option value="contains">Contains</option>
+        </select>
+
+        <input
+          className="w-full p-2 text-xs border border-orange-300 rounded focus:border-orange-500 focus:outline-none text-gray-600"
+          placeholder="Value to compare (e.g., buy, sell, hold)"
           value={data.value || ""}
           onChange={(e) => updateNodeData("value", e.target.value)}
         />
+
+        <div className="text-xs text-orange-600 bg-orange-100 p-1 rounded">
+          💡 Connect from AI node, then set value to "buy", "sell", etc.
+        </div>
       </div>
 
       <div className="flex justify-between mt-3">
@@ -70,8 +83,8 @@ export function CompareNode({
       </div>
 
       <div className="flex justify-between text-xs text-gray-600 mt-1">
-        <span>True</span>
-        <span>False</span>
+        <span>✅ True</span>
+        <span>❌ False</span>
       </div>
     </div>
   );

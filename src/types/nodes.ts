@@ -48,8 +48,9 @@ export interface ActionNodeData extends BaseNodeData {
 
 export interface ConditionNodeData extends BaseNodeData {
   type: "compare" | "filter" | "delay";
-  operator?: ">" | "<" | "==" | "!=" | ">=" | "<=";
+  operator?: ">" | "<" | "==" | "!=" | ">=" | "<=" | "contains";
   value?: string;
+  inputKey?: string; // Add this line
   delayTime?: number;
 }
 
