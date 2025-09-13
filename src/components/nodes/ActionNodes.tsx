@@ -458,3 +458,66 @@ export function ShowDataNode({
     </div>
   );
 }
+
+// Add this to your ActionNodes.tsx file:
+
+export function WhatsAppNode({
+  id,
+  data,
+  selected,
+}: NodeProps<ActionNodeData>) {
+  const updateNodeData = (key: string, value: string) => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("nodeDataUpdate", {
+          detail: { id, data: { ...data, [key]: value } },
+        })
+      );
+    }
+  };
+
+  return (
+    <div
+      className={`p-3 border rounded-lg bg-green-50 shadow-sm min-w-[250px] ${
+        selected ? "border-green-500 shadow-md" : "border-green-300"
+      }`}
+    >
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!bg-green-500 !border-green-600"
+      />
+
+      <div className="font-medium text-sm text-green-800 mb-2">
+        📱 {data.label}
+      </div>
+
+      <div className="space-y-2">
+        <input
+          className="w-full p-2 text-xs border border-green-300 rounded focus:border-green-500 focus:outline-none text-gray-600"
+          placeholder="Phone Number (with country code: +1234567890)"
+          value={data.phoneNumber || ""}
+          onChange={(e) => updateNodeData("phoneNumber", e.target.value)}
+        />
+        
+        <textarea
+          className="w-full p-2 text-xs border border-green-300 rounded focus:border-green-500 focus:outline-none resize-none text-gray-600"
+          placeholder="Message to send..."
+          rows={3}
+          value={data.message || ""}
+          onChange={(e) => updateNodeData("message", e.target.value)}
+        />
+        
+        <div className="text-xs text-green-600">
+          Sends WhatsApp message via Cloud API
+        </div>
+      </div>
+
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!bg-green-500 !border-green-600"
+      />
+    </div>
+  );
+}

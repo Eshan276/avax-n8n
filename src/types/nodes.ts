@@ -36,9 +36,12 @@ export interface ActionNodeData extends BaseNodeData {
   headers?: string;
   body?: string;
   curlCommand?: string;
+  mode?: string;
   // Show Data fields
   dataKey?: string;
   displayText?: string;
+  phoneNumber?: string;
+  message?: string;
 }
 
 export interface ConditionNodeData extends BaseNodeData {

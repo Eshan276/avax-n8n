@@ -17,7 +17,7 @@ import {
   NodeTypes,
 } from "reactflow";
 import "reactflow/dist/style.css";
-
+import { WhatsAppNode } from "@/components/nodes/ActionNodes";
 // Import the new node components
 import { BlockTriggerNode, TimeTriggerNode, PriceTriggerNode } from "@/components/nodes/TriggerNodes";
 import { SendAvaxNode, SwapTokenNode, ContractCallNode } from "@/components/nodes/ActionNodes";
@@ -124,7 +124,7 @@ const nodeTypes: NodeTypes = {
   blockTrigger: BlockTriggerNode,
   timeTrigger: TimeTriggerNode,
   priceTrigger: PriceTriggerNode,
-  nftPriceTrigger: NftPriceTriggerNode, 
+  nftPriceTrigger: NftPriceTriggerNode,
   sendAvax: SendAvaxNode,
   swapToken: SwapTokenNode,
   contractCall: ContractCallNode,
@@ -132,7 +132,7 @@ const nodeTypes: NodeTypes = {
   showData: ShowDataNode,
   compare: CompareNode,
   delay: DelayNode,
-
+  whatsApp: WhatsAppNode,
   // Legacy nodes (for backwards compatibility)
   action: ActionNode,
   trigger: TriggerNode,
@@ -497,9 +497,44 @@ export default function WorkflowBuilder() {
             alert(`Contract call failed: ${contractError.message}`);
             continue;
           }
-        }
+        } else if (
+          node.type === "whatsApp" &&
+          node.data.phoneNumber &&
+          node.data.message
+        ) {
+          console.log("📱 Found WhatsApp node");
 
-        
+          try {
+            const response = await fetch("/api/whatsapp", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                number: node.data.phoneNumber,
+                message: node.data.message,
+              }),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              console.log(
+                "✅ WhatsApp message sent successfully:",
+                result.data
+              );
+              alert(
+                `📱 WhatsApp Message Sent!\nTo: ${node.data.phoneNumber}\nMessage: ${node.data.message}`
+              );
+            } else {
+              console.error("❌ WhatsApp message failed:", result.error);
+              alert(`WhatsApp Message Failed: ${JSON.stringify(result.error)}`);
+            }
+          } catch (error: any) {
+            console.error("❌ WhatsApp error:", error);
+            alert(`WhatsApp Error: ${error.message}`);
+          }
+        }
 
         // Handle Swap Token nodes (placeholder)
         else if (
@@ -534,15 +569,15 @@ export default function WorkflowBuilder() {
 
         // Handle Compare nodes
         else if (
-            node.type === "compare" &&
-            node.data.operator &&
-            node.data.value
+          node.type === "compare" &&
+          node.data.operator &&
+          node.data.value
         ) {
-            console.log("🔍 Found Compare node");
-            console.log(
+          console.log("🔍 Found Compare node");
+          console.log(
             `🔍 Compare: value ${node.data.operator} ${node.data.value}`
-            );
-            alert(`Compare condition: ${node.data.operator} ${node.data.value}`);
+          );
+          alert(`Compare condition: ${node.data.operator} ${node.data.value}`);
         }
 
         // Handle Delay nodes
@@ -556,8 +591,7 @@ export default function WorkflowBuilder() {
           );
 
           alert(`Delayed execution by ${node.data.delayTime} seconds`);
-        } 
-        else if (node.type === "setData" && node.data.storageKey) {
+        } else if (node.type === "setData" && node.data.storageKey) {
           console.log("💾 Found Set Data node");
 
           try {
@@ -668,8 +702,6 @@ export default function WorkflowBuilder() {
           }
         }
         // Replace the existing Show Data handling with this:
-
-
         else if (node.type === "showData") {
           console.log("📊 Found Show Data node");
 
@@ -1097,6 +1129,14 @@ export default function WorkflowBuilder() {
             >
               📊 Show Data
             </button>
+            <button
+              onClick={() =>
+                addNode("whatsApp", "Send WhatsApp", "Send WhatsApp message")
+              }
+              className="w-full bg-green-500 hover:bg-green-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+              📱 Send WhatsApp
+            </button> 
           </div>
 
           {/* Condition Nodes */}
