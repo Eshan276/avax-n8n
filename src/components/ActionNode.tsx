@@ -31,13 +31,13 @@ export function ActionNode({ id, data }: NodeProps<ActionNodeData>) {
       {data.label.includes("Action") && (
         <div className="space-y-2">
           <input
-            className="w-full p-2 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
-            placeholder="To Address (0x...)"
+            className="w-full p-2 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none text-gray-600"
+            placeholder="To Address (0xf...)"
             value={data.to || ""}
             onChange={(e) => updateNodeData("to", e.target.value)}
           />
           <input
-            className="w-full p-2 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+            className="w-full p-2 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none text-gray-600"
             placeholder="Amount (AVAX)"
             type="number"
             step="0.01"

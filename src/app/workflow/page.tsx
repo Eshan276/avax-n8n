@@ -70,13 +70,13 @@ function ActionNode({ id, data, selected }: any) {
       {localData.label.includes("Action") && (
         <div className="space-y-2">
           <input
-            className="w-full p-2 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+            className="w-full p-2 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none text-gray-600"
             placeholder="To Address (0x...)"
             value={localData.to || ""}
             onChange={(e) => updateNodeData("to", e.target.value)}
           />
           <input
-            className="w-full p-2 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+            className="w-full p-2 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none text-gray-600"
             placeholder="Amount (AVAX)"
             type="number"
             step="0.01"
@@ -261,75 +261,243 @@ export default function WorkflowBuilder() {
   };
 
   // Execute workflow
-  const executeWorkflow = async () => {
-    const actionNodes = nodes.filter((n) => n.type === "action");
-    const invalidNodes = actionNodes.filter(
-      (n) => !n.data.to || !n.data.amount
-    );
+  // Add this helper function at the top of your component (same as in AvaxWallet)
+  const getMetaMaskProvider = () => {
+    if (typeof window === "undefined") return null;
 
-    if (actionNodes.length === 0) {
-      alert("Add at least one action node to execute the workflow");
-      return;
-    }
-
-    if (invalidNodes.length > 0) {
-      alert(
-        `Please fill in all action node fields:\n${invalidNodes
-          .map((n) => `- Node ${n.id}`)
-          .join("\n")}`
+    // If there are multiple providers, find MetaMask specifically
+    if (window.ethereum?.providers) {
+      return window.ethereum.providers.find(
+        (provider: any) => provider.isMetaMask
       );
+    }
+
+    // If single provider and it's MetaMask
+    if (window.ethereum?.isMetaMask) {
+      return window.ethereum;
+    }
+
+    return null;
+  };
+
+  const executeWorkflow = async () => {
+    // Use the specific MetaMask provider instead of generic window.ethereum
+    const metaMask = getMetaMaskProvider();
+
+    if (!metaMask) {
+      alert("MetaMask not found or not available");
       return;
     }
 
-    setIsExecuting(true);
     try {
-      const payload = {
-        nodes: nodes.map((node) => ({
-          id: node.id,
-          type: node.type,
-          data: {
-            label: node.data.label,
-            to: node.data.to || "",
-            amount: node.data.amount || "",
-          },
-          position: node.position,
-        })),
-        edges: edges.map((edge) => ({
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          type: edge.type,
-        })),
-      };
+      setIsExecuting(true);
+      console.log("🚀 Starting workflow execution...");
 
-      console.log("Executing workflow:", payload);
-
-      const response = await fetch("/api/execute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(payload),
+      // Get the connected account from MetaMask specifically
+      const accounts = await metaMask.request({
+        method: "eth_accounts",
       });
+      console.log("📋 Connected accounts:", accounts);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      if (accounts.length === 0) {
+        alert("Please connect your wallet first");
+        return;
       }
 
-      const result = await response.json();
+      const account = accounts[0];
+      console.log("👤 Using account:", account);
 
-      alert(
-        `✅ Workflow executed successfully!\n\nActions performed: ${
-          actionNodes.length
-        }\nResult: ${JSON.stringify(result, null, 2)}`
+      // Check if we're on Fuji testnet using MetaMask provider
+      const chainId = await metaMask.request({
+        method: "eth_chainId",
+      });
+
+      const chainIdDecimal = parseInt(chainId, 16);
+      console.log("🌐 Current chain ID (hex):", chainId);
+      console.log("🌐 Current chain ID (decimal):", chainIdDecimal);
+      console.log("🌐 Expected Fuji chain ID (hex): 0xA869");
+      console.log("🌐 Expected Fuji chain ID (decimal): 43113");
+      console.log(
+        "🌐 Chain ID match check:",
+        chainId === "0xA869",
+        chainIdDecimal === 43113
       );
+
+      // Get current network info
+      try {
+        const networkVersion = await metaMask.request({
+          method: "net_version",
+        });
+        console.log("🌐 Network version:", networkVersion);
+      } catch (netError) {
+        console.log("❌ Could not get network version:", netError);
+      }
+
+      if (chainId !== "0xA869" && chainIdDecimal !== 43113) {
+        console.log("❌ Wrong network detected!");
+        alert(
+          `Please switch to Avalanche Fuji testnet.\nCurrent: ${chainIdDecimal}\nExpected: 43113`
+        );
+        return;
+      }
+
+      console.log("✅ Correct network confirmed - Avalanche Fuji");
+
+      // Get current balance
+      try {
+        const balance = await metaMask.request({
+          method: "eth_getBalance",
+          params: [account, "latest"],
+        });
+        const balanceInAvax = (
+          parseInt(balance, 16) / Math.pow(10, 18)
+        ).toFixed(4);
+        console.log("💰 Current balance:", balanceInAvax, "AVAX");
+      } catch (balanceError) {
+        console.log("❌ Could not get balance:", balanceError);
+      }
+
+      console.log("📊 Processing nodes:", nodes.length);
+
+      // Execute each action node
+      for (const node of nodes) {
+        console.log("🔍 Processing node:", node.id, node.type, node.data.label);
+
+        if (node.type === "action" && node.data.label.includes("Send AVAX")) {
+          console.log("💸 Found Send AVAX action node");
+          console.log("📝 Node data:", {
+            to: node.data.to,
+            amount: node.data.amount,
+            label: node.data.label,
+          });
+
+          if (!node.data.to || !node.data.amount) {
+            console.log("❌ Missing required fields for node:", node.id);
+            alert(`Node ${node.id} missing recipient address or amount`);
+            continue;
+          }
+
+          // Validate recipient address
+          const addressRegex = /^0x[a-fA-F0-9]{40}$/;
+          const isValidAddress = addressRegex.test(node.data.to);
+          console.log("🔍 Address validation:", {
+            address: node.data.to,
+            isValid: isValidAddress,
+            length: node.data.to.length,
+          });
+
+          if (!isValidAddress) {
+            console.log("❌ Invalid address format");
+            alert(`Invalid recipient address: ${node.data.to}`);
+            continue;
+          }
+
+          // Convert amount to wei (18 decimals for AVAX)
+          const amountFloat = parseFloat(node.data.amount);
+          const amountInWei = BigInt(
+            Math.floor(amountFloat * Math.pow(10, 18))
+          );
+          const amountInWeiHex = "0x" + amountInWei.toString(16);
+
+          console.log("💰 Amount conversion:", {
+            originalAmount: node.data.amount,
+            amountFloat: amountFloat,
+            amountInWei: amountInWei.toString(),
+            amountInWeiHex: amountInWeiHex,
+          });
+
+          console.log(
+            `📤 Preparing to send ${node.data.amount} AVAX to ${node.data.to}`
+          );
+
+          const txParams = {
+            from: account,
+            to: node.data.to,
+            value: amountInWeiHex,
+            gas: "0x5208", // 21000 gas for simple transfer
+          };
+
+          console.log("📋 Transaction parameters:", txParams);
+
+          // Send transaction using MetaMask specifically
+          console.log("🔄 Sending transaction...");
+          const txHash = await metaMask.request({
+            method: "eth_sendTransaction",
+            params: [txParams],
+          });
+
+          console.log("✅ Transaction sent successfully!");
+          console.log("📄 Transaction hash:", txHash);
+
+          const explorerUrl = `https://testnet.snowtrace.io/tx/${txHash}`;
+          console.log("🔗 Explorer URL:", explorerUrl);
+
+          alert(
+            `Transaction sent successfully!\nTx Hash: ${txHash}\nView on explorer: ${explorerUrl}`
+          );
+        } else {
+          console.log(
+            "⏭️ Skipping non-action node:",
+            node.type,
+            node.data.label
+          );
+        }
+      }
+
+      console.log("🎉 Workflow execution completed!");
     } catch (error: any) {
-      console.error("Execution error:", error);
-      alert(`❌ Failed to execute workflow:\n${error.message}`);
+      console.error("❌ Failed to execute workflow:", error);
+      console.error("❌ Error details:", {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+      });
+      alert(`Failed to execute workflow: ${error.message}`);
     } finally {
       setIsExecuting(false);
+      console.log("🏁 Execution finished, isExecuting set to false");
+    }
+  };
+
+  // Debug MetaMask
+  const debugMetaMask = async () => {
+    if (!window.ethereum) {
+      console.log("❌ No ethereum object found");
+      return;
+    }
+
+    try {
+      console.log("🔍 DEBUGGING METAMASK STATE:");
+
+      // Check accounts
+      const accounts = await window.ethereum.request({
+        method: "eth_accounts",
+      });
+      console.log("📋 Accounts from eth_accounts:", accounts);
+
+      // Check chain ID
+      const chainId = await window.ethereum.request({
+        method: "eth_chainId",
+      });
+      console.log(
+        "🌐 Chain ID from eth_chainId:",
+        chainId,
+        "decimal:",
+        parseInt(chainId, 16)
+      );
+
+      // Check network version
+      const networkVersion = await window.ethereum.request({
+        method: "net_version",
+      });
+      console.log("🌐 Network version:", networkVersion);
+
+      // Check if MetaMask is the active provider
+      console.log("🦊 Is MetaMask:", window.ethereum.isMetaMask);
+      console.log("🦊 Providers:", window.ethereum.providers);
+    } catch (error) {
+      console.error("❌ Debug error:", error);
     }
   };
 
@@ -469,6 +637,13 @@ export default function WorkflowBuilder() {
               className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors"
             >
               🗑 Delete Selected
+            </button>
+
+            <button
+              onClick={debugMetaMask}
+              className="w-full bg-yellow-500 text-white text-sm py-2.5 px-4 rounded-lg transition-colors"
+            >
+              Debug MetaMask
             </button>
           </div>
 
