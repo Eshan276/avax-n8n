@@ -1,4 +1,5 @@
 "use client";
+import AvaxWallet from "@/components/AvaxWallet";
 import { useState, useEffect, useCallback } from "react";
 import {
   ReactFlow,
@@ -469,6 +470,14 @@ export default function WorkflowBuilder() {
             >
               🗑 Delete Selected
             </button>
+          </div>
+
+          {/* Wallet Section */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+              Wallet
+            </h3>
+            <AvaxWallet />
           </div>
 
           {/* File Operations */}
