@@ -11,7 +11,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = "";
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
 
     // Call Gemini API with the correct model name
     const response = await fetch(
