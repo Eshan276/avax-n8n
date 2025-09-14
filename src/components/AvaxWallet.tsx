@@ -1,7 +1,20 @@
-/* eslint-disable */
-// @ts-nocheck
 "use client";
 import { useState, useEffect } from "react";
+
+// Extend the Window interface to include the ethereum property
+interface EthereumProvider {
+  isMetaMask?: boolean;
+  providers?: EthereumProvider[];
+  request?: (args: { method: string; params?: any[] }) => Promise<any>;
+  on?: (event: string, listener: (...args: any[]) => void) => void;
+  removeListener?: (event: string, listener: (...args: any[]) => void) => void;
+}
+
+declare global {
+  interface Window {
+    ethereum?: EthereumProvider;
+  }
+}
 
 interface WalletState {
   isConnected: boolean;
@@ -21,28 +34,26 @@ export default function AvaxWallet() {
   // Check if MetaMask is installed and available
   const isMetaMaskInstalled = () => {
     if (typeof window === "undefined") return false;
-
-    // Check for MetaMask specifically
-    return window.ethereum?.isMetaMask === true;
+    return typeof window.ethereum !== "undefined";
   };
 
   // Get MetaMask provider specifically
   const getMetaMaskProvider = () => {
-    if (typeof window === "undefined") return null;
+    if (typeof window === "undefined" || !window.ethereum) return null;
 
     // If there are multiple providers, find MetaMask specifically
-    if (window.ethereum?.providers) {
+    if (window.ethereum.providers) {
       return window.ethereum.providers.find(
         (provider: any) => provider.isMetaMask
       );
     }
 
     // If single provider and it's MetaMask
-    if (window.ethereum?.isMetaMask) {
+    if (window.ethereum.isMetaMask) {
       return window.ethereum;
     }
 
-    return null;
+    return window.ethereum; // Fallback to main ethereum object
   };
 
   // Connect to wallet
@@ -50,16 +61,17 @@ export default function AvaxWallet() {
     const metaMask = getMetaMaskProvider();
 
     if (!metaMask) {
-      alert(
-        "MetaMask is not installed or not available. Please install MetaMask and disable other wallet extensions temporarily."
-      );
+      alert("MetaMask is not installed. Please install MetaMask.");
       return;
     }
 
     try {
       setWallet((prev) => ({ ...prev, isConnecting: true }));
 
-      // Request account access specifically from MetaMask
+      // Request account access
+      if (!metaMask.request) {
+        throw new Error("MetaMask provider does not support requests.");
+      }
       const accounts = await metaMask.request({
         method: "eth_requestAccounts",
       });
@@ -92,17 +104,16 @@ export default function AvaxWallet() {
     try {
       await provider.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0xA869" }], // 43113 in hex = Avalanche Fuji C-Chain
+        params: [{ chainId: "0xA869" }], // 43113 in hex
       });
     } catch (switchError: any) {
-      // This error code indicates that the chain has not been added to MetaMask
       if (switchError.code === 4902) {
         try {
           await provider.request({
             method: "wallet_addEthereumChain",
             params: [
               {
-                chainId: "0xA869", // 43113 in hex
+                chainId: "0xA869",
                 chainName: "Avalanche Fuji C-Chain",
                 nativeCurrency: {
                   name: "AVAX",
@@ -138,7 +149,6 @@ export default function AvaxWallet() {
         params: [address, "latest"],
       });
 
-      // Convert from wei to AVAX
       const avaxBalance = (parseInt(balance, 16) / Math.pow(10, 18)).toFixed(4);
       return avaxBalance;
     } catch (error) {
@@ -157,18 +167,17 @@ export default function AvaxWallet() {
     });
   };
 
-  // Listen for account changes
+  // Listen for account changes - FIXED VERSION
   useEffect(() => {
-    const metaMask = getMetaMaskProvider();
-    if (!metaMask) return;
+    if (typeof window === "undefined" || !window.ethereum) return;
 
     const handleAccountsChanged = (accounts: string[]) => {
+      console.log("Accounts changed:", accounts);
       if (accounts.length === 0) {
         disconnectWallet();
       } else if (accounts[0] !== wallet.address) {
-        // Update with new account without full reconnection
         const newAddress = accounts[0];
-        getBalance(newAddress, metaMask).then((balance) => {
+        getBalance(newAddress).then((balance) => {
           setWallet((prev) => ({
             ...prev,
             address: newAddress,
@@ -180,7 +189,6 @@ export default function AvaxWallet() {
 
     const handleChainChanged = (chainId: string) => {
       console.log("Chain changed to:", chainId);
-      // Only disconnect if not on Fuji testnet
       if (chainId !== "0xA869") {
         setWallet((prev) => ({
           ...prev,
@@ -191,13 +199,24 @@ export default function AvaxWallet() {
       }
     };
 
-    metaMask.on("accountsChanged", handleAccountsChanged);
-    metaMask.on("chainChanged", handleChainChanged);
+    // Check if the provider has event listener methods
+    if (window.ethereum.on && typeof window.ethereum.on === "function") {
+      window.ethereum.on("accountsChanged", handleAccountsChanged);
+      window.ethereum.on("chainChanged", handleChainChanged);
+    }
 
+    // Cleanup function
     return () => {
-      if (metaMask.removeListener) {
-        metaMask.removeListener("accountsChanged", handleAccountsChanged);
-        metaMask.removeListener("chainChanged", handleChainChanged);
+      if (
+        window.ethereum &&
+        window.ethereum.removeListener &&
+        typeof window.ethereum.removeListener === "function"
+      ) {
+        window.ethereum.removeListener(
+          "accountsChanged",
+          handleAccountsChanged
+        );
+        window.ethereum.removeListener("chainChanged", handleChainChanged);
       }
     };
   }, [wallet.address]);
@@ -205,23 +224,25 @@ export default function AvaxWallet() {
   // Check if already connected on mount
   useEffect(() => {
     const checkConnection = async () => {
-      const metaMask = getMetaMaskProvider();
-      if (!metaMask) return;
+      if (typeof window === "undefined" || !window.ethereum) return;
 
       try {
-        const accounts = await metaMask.request({
-          method: "eth_accounts",
-        });
+        const accounts = window.ethereum?.request
+          ? await window.ethereum.request({
+              method: "eth_accounts",
+            })
+          : [];
 
         if (accounts.length > 0) {
-          // Check if we're on the right network
-          const chainId = await metaMask.request({
-            method: "eth_chainId",
-          });
+          const chainId = window.ethereum?.request
+            ? await window.ethereum.request({
+                method: "eth_chainId",
+              })
+            : null;
 
           if (chainId === "0xA869") {
             const address = accounts[0];
-            const balance = await getBalance(address, metaMask);
+            const balance = await getBalance(address);
 
             setWallet({
               isConnected: true,
@@ -244,8 +265,8 @@ export default function AvaxWallet() {
       <div className="bg-red-50 border border-red-200 rounded-lg p-4">
         <h3 className="font-medium text-red-800 mb-2">MetaMask Required</h3>
         <p className="text-sm text-red-600 mb-3">
-          MetaMask is not installed or not available. Please install MetaMask
-          and disable other wallet extensions (like Phantom) temporarily.
+          MetaMask is not installed. Please install MetaMask to use this
+          application.
         </p>
         <a
           href="https://metamask.io/download/"
@@ -261,9 +282,7 @@ export default function AvaxWallet() {
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-      <h3 className="font-medium text-gray-800 mb-3">
-        Avalanche Fuji Testnet (MetaMask)
-      </h3>
+      <h3 className="font-medium text-gray-800 mb-3">Avalanche Fuji Testnet</h3>
 
       {!wallet.isConnected ? (
         <button
@@ -271,7 +290,7 @@ export default function AvaxWallet() {
           disabled={wallet.isConnecting}
           className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {wallet.isConnecting ? "Connecting..." : "Connect MetaMask"}
+          {wallet.isConnecting ? "Connecting..." : "Connect Wallet"}
         </button>
       ) : (
         <div className="space-y-3">
@@ -290,7 +309,7 @@ export default function AvaxWallet() {
           </div>
 
           <div className="text-xs text-gray-500 text-center">
-            Connected to Fuji Testnet via MetaMask
+            Connected to Fuji Testnet
           </div>
 
           <button
