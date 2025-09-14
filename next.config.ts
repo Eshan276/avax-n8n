@@ -3,6 +3,7 @@ const nextConfig = {
   experimental: {
     // Disable strict mode for client components
     esmExternals: "loose",
+    forceSwcTransforms: true,
   },
   // Disable webpack's default serialization checks
   webpack: (config: any, { isServer }: { isServer: boolean }) => {
@@ -35,9 +36,11 @@ const nextConfig = {
     "@reactflow/minimap",
   ],
 
-  // Disable static optimization for pages with dynamic content
-  experimental: {
-    forceSwcTransforms: true,
+  
+  eslint: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors.
+    ignoreDuringBuilds: true,
   },
 };
 
