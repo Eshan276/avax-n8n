@@ -21,6 +21,7 @@ import {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { WhatsAppNode, AiNode } from "@/components/nodes/ActionNodes";
+import { CustomContractNode } from "@/components/nodes/ContractNodes";
 
 // Import the new node components
 import {
@@ -152,6 +153,7 @@ const nodeTypes: NodeTypes = {
 
   setData: SetDataNode,
   getData: GetDataNode,
+  customContract: CustomContractNode,
 };
 
 export default function WorkflowBuilder() {
@@ -160,7 +162,95 @@ export default function WorkflowBuilder() {
   const [mounted, setMounted] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const workflowDataStore = new Map<string, any>();
+  function generateCustomContract(
+    contractName: string,
+    accounts: any[],
+    functions: any[]
+  ): string {
+    let solidity = `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
 
+contract ${contractName} {
+    // State variables for accounts
+`;
+
+    // Add account variables
+    accounts.forEach((account, index) => {
+      solidity += `    address public ${account.name};\n`;
+      if (account.balance && account.balance !== "0") {
+        solidity += `    uint256 public ${account.name}Balance = ${account.balance};\n`;
+      }
+    });
+
+    solidity += `\n    // Events\n`;
+    functions.forEach((func) => {
+      if (func.returnType !== "void") {
+        solidity += `    event ${func.name}Called(${func.returnType} result);\n`;
+      } else {
+        solidity += `    event ${func.name}Called();\n`;
+      }
+    });
+
+    solidity += `\n    constructor() {\n`;
+    accounts.forEach((account) => {
+      if (account.address) {
+        solidity += `        ${account.name} = ${account.address};\n`;
+      }
+    });
+    solidity += `    }\n\n`;
+
+    // Add custom functions
+    functions.forEach((func) => {
+      const returnStr =
+        func.returnType !== "void" ? ` returns (${func.returnType})` : "";
+      solidity += `    function ${func.name}(${func.parameters}) ${func.visibility}${returnStr} {\n`;
+
+      if (func.returnType === "uint256") {
+        solidity += `        uint256 result = 42; // Placeholder\n`;
+        solidity += `        emit ${func.name}Called(result);\n`;
+        solidity += `        return result;\n`;
+      } else if (func.returnType === "string") {
+        solidity += `        string memory result = "Hello World";\n`;
+        solidity += `        emit ${func.name}Called(result);\n`;
+        solidity += `        return result;\n`;
+      } else if (func.returnType === "bool") {
+        solidity += `        bool result = true;\n`;
+        solidity += `        emit ${func.name}Called(result);\n`;
+        solidity += `        return result;\n`;
+      } else {
+        solidity += `        // Custom function logic here\n`;
+        solidity += `        emit ${func.name}Called();\n`;
+      }
+
+      solidity += `    }\n\n`;
+    });
+
+    solidity += `}`;
+    return solidity;
+  }
+
+  // Helper function to simulate function calls
+  async function simulateCustomFunctionCall(
+    functionName: string,
+    parameters: string
+  ) {
+    try {
+      const params = parameters ? JSON.parse(parameters) : [];
+      return {
+        function: functionName,
+        parameters: params,
+        result: "Success",
+        gasUsed: Math.floor(Math.random() * 50000) + 21000,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        function: functionName,
+        error: "Invalid parameters",
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
   // Handle node data updates from custom events
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -602,6 +692,60 @@ export default function WorkflowBuilder() {
           alert(
             `Time trigger configured for ${node.data.interval} seconds interval`
           );
+        } else if (node.type === "customContract" && node.data.contractName) {
+          console.log("🏗️ Found Custom Contract node");
+
+          try {
+            // Generate Solidity code from user input
+            const solidityCode = generateCustomContract(
+              node.data.contractName,
+              node.data.accounts || [],
+              node.data.functions || []
+            );
+
+            console.log("📝 Generated Solidity:", solidityCode);
+
+            // Simulate deployment
+            const contractAddress =
+              "0x" + Math.random().toString(16).substr(2, 40);
+
+            // Store contract info
+            workflowDataStore.set(`custom_contract_${node.id}`, {
+              address: contractAddress,
+              source: solidityCode,
+              accounts: node.data.accounts,
+              functions: node.data.functions,
+            });
+
+            // Call function if selected
+            if (node.data.selectedFunction) {
+              const functionResult = await simulateCustomFunctionCall(
+                node.data.selectedFunction,
+                node.data.callParameters
+              );
+
+              workflowDataStore.set(`custom_result_${node.id}`, functionResult);
+
+              alert(
+                `🏗️ Custom Contract Deployed & Function Called!\n` +
+                  `Contract: ${node.data.contractName}\n` +
+                  `Address: ${contractAddress.slice(0, 10)}...\n` +
+                  `Function: ${node.data.selectedFunction}\n` +
+                  `Result: ${JSON.stringify(functionResult)}`
+              );
+            } else {
+              alert(
+                `🏗️ Custom Contract Deployed!\n` +
+                  `Contract: ${node.data.contractName}\n` +
+                  `Address: ${contractAddress.slice(0, 10)}...\n` +
+                  `Accounts: ${node.data.accounts?.length || 0}\n` +
+                  `Functions: ${node.data.functions?.length || 0}`
+              );
+            }
+          } catch (error: any) {
+            console.error("❌ Custom contract error:", error);
+            alert(`Custom Contract Error: ${error.message}`);
+          }
         }
 
         // Handle Price Trigger nodes
@@ -1347,7 +1491,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-blue-500 hover:bg-blue-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              🔗 Block Trigger
+               Block Trigger
             </button>
             <button
               onClick={() =>
@@ -1359,7 +1503,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-purple-500 hover:bg-purple-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              ⏰ Time Trigger
+               Time Trigger
             </button>
             <button
               onClick={() =>
@@ -1371,7 +1515,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-yellow-500 hover:bg-yellow-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              💰 Price Trigger
+               Price Trigger
             </button>
             <button
               onClick={() =>
@@ -1383,7 +1527,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              🖼️ NFT Price Trigger
+               NFT Price Trigger
             </button>
           </div>
 
@@ -1398,7 +1542,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-green-500 hover:bg-green-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              💸 Send AVAX
+               Send AVAX
             </button>
             <button
               onClick={() =>
@@ -1406,7 +1550,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-indigo-500 hover:bg-indigo-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              🔄 Swap Tokens
+               Swap Tokens
             </button>
             <button
               onClick={() =>
@@ -1418,7 +1562,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-red-500 hover:bg-red-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              📞 Contract Call
+               Contract Call
             </button>
             <button
               onClick={() =>
@@ -1426,7 +1570,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-purple-500 hover:bg-purple-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              🌐 API Call
+               API Call
             </button>
             <button
               onClick={() =>
@@ -1434,7 +1578,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-pink-500 hover:bg-pink-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              📊 Show Data
+               Show Data
             </button>
             <button
               onClick={() =>
@@ -1450,7 +1594,19 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-violet-500 hover:bg-violet-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              🤖 AI Assistant
+               AI Assistant
+            </button>
+            <button
+              onClick={() =>
+                addNode(
+                  "customContract",
+                  "Custom Contract",
+                  "Build and deploy custom smart contracts - EXPERIMENTAL"
+                )
+              }
+              className="w-full bg-purple-500 hover:bg-purple-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
+            >
+               Custom Contract
             </button>
           </div>
 
@@ -1469,13 +1625,13 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              🔍 Compare
+               Compare
             </button>
             <button
               onClick={() => addNode("delay", "Delay", "Add delay to workflow")}
               className="w-full bg-gray-500 hover:bg-gray-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              ⏳ Delay
+               Delay
             </button>
           </div>
 
@@ -1489,7 +1645,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-cyan-500 hover:bg-cyan-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              💾 Set Data
+               Set Data
             </button>
             <button
               onClick={() =>
@@ -1497,7 +1653,7 @@ export default function WorkflowBuilder() {
               }
               className="w-full bg-teal-500 hover:bg-teal-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors text-left"
             >
-              📤 Get Data
+               Get Data
             </button>
           </div>
 
@@ -1522,7 +1678,7 @@ export default function WorkflowBuilder() {
               onClick={deleteSelected}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors"
             >
-              🗑 Delete Selected
+               Delete Selected
             </button>
 
             <button
@@ -1550,11 +1706,11 @@ export default function WorkflowBuilder() {
               onClick={exportWorkflow}
               className="w-full bg-purple-500 hover:bg-purple-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors"
             >
-              📤 Export Workflow
+               Export Workflow
             </button>
 
             <label className="w-full bg-indigo-500 hover:bg-indigo-600 text-white text-sm py-2.5 px-4 rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2">
-              📁 Import Workflow
+               Import Workflow
               <input
                 type="file"
                 accept=".json"
