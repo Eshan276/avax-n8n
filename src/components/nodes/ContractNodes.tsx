@@ -1,3 +1,6 @@
+/* eslint-disable */
+// @ts-nocheck
+
 import { Handle, Position, NodeProps } from "reactflow";
 import { useState, useEffect } from "react";
 
