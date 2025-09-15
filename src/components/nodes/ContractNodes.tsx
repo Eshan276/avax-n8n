@@ -173,7 +173,10 @@ export function CustomContractNode({
       />
 
       <div className="font-medium mb-3 text-sm text-gray-800 flex items-center gap-2">
-        🏗️ {localData.label}
+        <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">
+          EXPERIMENTAL
+        </span>
+        {localData.label}
       </div>
 
       <div className="space-y-4 max-h-96 overflow-y-auto">
